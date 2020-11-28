@@ -53,7 +53,8 @@ pub trait Middleware {
     type Ms;
 
     fn initialized(&self, model: &Self::Mdl);
-    fn received(&self, ms: &Self::Ms);
+    fn received(&self, ms: &Self::Ms, model: &Self::Mdl);
+    fn updated(&self, model: &Self::Mdl);
 }
 
 pub struct App<Ms, Mdl, INodes>
@@ -418,7 +419,7 @@ where
 
         if let Some(message) = message {
 
-            self.middlewares.iter().for_each(|mid| mid.received(&message));
+            self.middlewares.iter().for_each(|mid| mid.received(&message, &self.data.model.borrow().as_ref().unwrap()));
 
             for l in self.data.msg_listeners.borrow().iter() {
                 (l)(&message)
@@ -429,6 +430,9 @@ where
                 &mut self.data.model.borrow_mut().as_mut().unwrap(),
                 &mut orders,
             );
+
+            self.middlewares.iter().for_each(|mid| mid.updated(&self.data.model.borrow().as_ref().unwrap()));
+
         }
 
         match orders.should_render {
