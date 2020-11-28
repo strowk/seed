@@ -48,6 +48,14 @@ pub enum ShouldRender {
     Skip,
 }
 
+pub trait Middleware {
+    type Mdl;
+    type Ms;
+
+    fn initialized(&self, model: &Self::Mdl);
+    fn received(&self, ms: &Self::Ms);
+}
+
 pub struct App<Ms, Mdl, INodes>
 where
     Ms: 'static,
@@ -58,6 +66,7 @@ where
     cfg: Rc<AppCfg<Ms, Mdl, INodes>>,
     /// Mutable app state.
     data: Rc<AppData<Ms, Mdl>>,
+    middlewares: Rc<Vec<Box<dyn Middleware<Mdl = Mdl, Ms = Ms>>>>,
 }
 
 impl<Ms, Mdl, INodes> fmt::Debug for App<Ms, Mdl, INodes>
@@ -77,11 +86,14 @@ where
 {
     fn clone(&self) -> Self {
         Self {
+            middlewares: Rc::clone(&self.middlewares),
             cfg: Rc::clone(&self.cfg),
             data: Rc::clone(&self.data),
         }
     }
 }
+
+
 
 /// We use a struct instead of series of functions, in order to avoid passing
 /// repetitive sequences of parameters.
@@ -133,11 +145,12 @@ where
     /// Panics if the root element cannot be found.
     ///
     // pub type UpdateFn<Ms, Mdl, INodes> = fn(Ms, &mut Mdl, &mut OrdersContainer<Ms, Mdl, INodes>);
-    pub fn start(
+    pub fn start_with_middlewares(
         root_element: impl GetElement,
         init: impl FnOnce(Url, &mut OrdersContainer<Ms, Mdl, INodes>) -> Mdl + 'static,
         update: impl FnOnce(Ms, &mut Mdl, &mut OrdersContainer<Ms, Mdl, INodes>) + Clone + 'static,
         view: impl FnOnce(&Mdl) -> INodes + Clone + 'static,
+        middlewares: Vec<Box<dyn Middleware<Ms = Ms, Mdl = Mdl>>>
     ) -> Self {
         // @TODO: Remove as soon as Webkit is fixed and older browsers are no longer in use.
         // https://github.com/seed-rs/seed/issues/241
@@ -184,6 +197,7 @@ where
                 after_next_render_callbacks: RefCell::new(Vec::new()),
                 render_info: Cell::new(None),
             }),
+            middlewares: Rc::new(middlewares),
         };
 
         app.data.root_el.replace(Some(app.bootstrap_vdom()));
@@ -194,6 +208,8 @@ where
             Url::current().skip_base_path(&Rc::clone(&app.cfg.base_path)),
             &mut orders,
         );
+        app.middlewares.iter().for_each(|mid| mid.initialized(&new_model));
+
         app.data.model.replace(Some(new_model));
 
         routing::setup_popstate_listener(
@@ -219,6 +235,19 @@ where
         app.rerender_vdom();
         app
     }
+
+    pub fn start(
+        root_element: impl GetElement,
+        init: impl FnOnce(Url, &mut OrdersContainer<Ms, Mdl, INodes>) -> Mdl + 'static,
+        update: impl FnOnce(Ms, &mut Mdl, &mut OrdersContainer<Ms, Mdl, INodes>) + Clone + 'static,
+        view: impl FnOnce(&Mdl) -> INodes + Clone + 'static,
+    ) -> Self { 
+        Self::start_with_middlewares(root_element, init, update, view, vec![])
+    } 
+
+    // pub fn add_midleware(&mut self, middleware: Box<dyn Middleware<Ms = Ms, Mdl = Mdl>>) {
+    //     self.middlewares.push(middleware);
+    // }
 
     /// Invoke your `update` function with provided message.
     pub fn update(&self, message: Ms) {
@@ -392,6 +421,9 @@ where
         let mut orders = OrdersContainer::new(self.clone());
 
         if let Some(message) = message {
+
+            self.middlewares.iter().for_each(|mid| mid.received(&message));
+
             for l in self.data.msg_listeners.borrow().iter() {
                 (l)(&message)
             }

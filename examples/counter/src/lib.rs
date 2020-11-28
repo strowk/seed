@@ -17,13 +17,13 @@ fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
 // ------ ------
 //     Model
 // ------ ------
-
 type Model = i32;
 
 // ------ ------
 //    Update
 // ------ ------
 
+#[derive(serde::Serialize)]
 enum Msg {
     Increment,
     Decrement,
@@ -51,8 +51,16 @@ fn view(model: &Model) -> Node<Msg> {
 // ------ ------
 //     Start
 // ------ ------
+mod devtools;
 
 #[wasm_bindgen(start)]
 pub fn start() {
-    App::start("app", init, update, view);
+    // App::start("app", init, update, view);
+    // let devtools_mdlware = devtools::DevTools{
+    //     phantom_mdl: std::marker::PhantomData{},
+    //     phantom_ms: std::marker::PhantomData{},
+    // };
+    let devtools_mdlware = devtools::DevTools::new();
+    let app = App::start_with_middlewares("app", init, update, view, vec![Box::new(devtools_mdlware)]);
+
 }
