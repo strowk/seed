@@ -245,10 +245,6 @@ where
         Self::start_with_middlewares(root_element, init, update, view, vec![])
     } 
 
-    // pub fn add_midleware(&mut self, middleware: Box<dyn Middleware<Ms = Ms, Mdl = Mdl>>) {
-    //     self.middlewares.push(middleware);
-    // }
-
     /// Invoke your `update` function with provided message.
     pub fn update(&self, message: Ms) {
         self.update_with_option(Some(message));
