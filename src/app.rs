@@ -43,22 +43,13 @@ pub use stream_manager::StreamHandle;
 pub use sub_manager::{Notification, SubHandle};
 
 pub mod devtools;
-pub use devtools::DevTools;
+pub use devtools::{DevTools, AppDevTool, AppWithDevtools};
 
 /// Determines if an update should cause the `VDom` to rerender or not.
 pub enum ShouldRender {
     Render,
     ForceRenderNow,
     Skip,
-}
-
-pub trait DevTool {
-    type Mdl;
-    type Ms;
-
-    fn initialized(&self, model: &Self::Mdl);
-    fn received(&self, ms: &Self::Ms, model: &Self::Mdl);
-    fn updated(&self, model: &Self::Mdl);
 }
 
 pub struct App<Ms, Mdl, INodes>
@@ -71,16 +62,6 @@ where
     cfg: Rc<AppCfg<Ms, Mdl, INodes>>,
     /// Mutable app state.
     data: Rc<AppData<Ms, Mdl>>,
-    devtools: Rc<Option<Box<dyn DevTool<Mdl = Mdl, Ms = Ms>>>>,
-}
-
-pub trait AppOptions<Ms, Mdl, INodes> 
-where
-    Ms: 'static,
-    Mdl: 'static,
-    INodes: IntoNodes<Ms>,
-{
-    fn apply(&self, app: &mut App<Ms, Mdl, INodes>);
 }
 
 impl<Ms, Mdl, INodes> fmt::Debug for App<Ms, Mdl, INodes>
@@ -102,33 +83,7 @@ where
         Self {
             cfg: Rc::clone(&self.cfg),
             data: Rc::clone(&self.data),
-            devtools: Rc::clone(&self.devtools),
         }
-    }
-}
-
-// following is an alternative approach to enable devtools with enable_dev_tools method
-// Unfortunately it does not work for some unknown reason
-pub trait AppWithDevtools {
-    type Mdl: serde::Serialize;
-    type Ms: serde::Serialize;
-
-    fn enable_dev_tools(&mut self);
-}
-
-impl<Ms, Mdl, INodes> AppWithDevtools for App<Ms, Mdl, INodes>
-where
-    Ms: serde::Serialize + 'static,
-    Mdl: serde::Serialize + 'static,
-    INodes: IntoNodes<Ms>,
-{
-    type Mdl = Mdl;
-    type Ms = Ms;
-
-    fn enable_dev_tools(&mut self) {
-        let devtools: DevTools<Ms, Mdl> = DevTools::new();
-        devtools.initialized(&self.data.model.borrow().as_ref().unwrap());
-        self.devtools = Rc::new(Some(Box::new(devtools)));
     }
 }
 
@@ -182,12 +137,11 @@ where
     /// Panics if the root element cannot be found.
     ///
     // pub type UpdateFn<Ms, Mdl, INodes> = fn(Ms, &mut Mdl, &mut OrdersContainer<Ms, Mdl, INodes>);
-    pub fn start_with_options(
+    pub fn start(
         root_element: impl GetElement,
         init: impl FnOnce(Url, &mut OrdersContainer<Ms, Mdl, INodes>) -> Mdl + 'static,
         update: impl FnOnce(Ms, &mut Mdl, &mut OrdersContainer<Ms, Mdl, INodes>) + Clone + 'static,
         view: impl FnOnce(&Mdl) -> INodes + Clone + 'static,
-        options: Vec<Box<dyn AppOptions<Ms, Mdl, INodes>>>
     ) -> Self {
         // @TODO: Remove as soon as Webkit is fixed and older browsers are no longer in use.
         // https://github.com/seed-rs/seed/issues/241
@@ -215,7 +169,7 @@ where
         );
 
 
-        let mut app = Self {
+        let app = Self {
             cfg: Rc::new(AppCfg {
                 document: util::window().document().expect("get window's document"),
                 mount_point: root_element.get_element().expect("get root element"),
@@ -234,8 +188,8 @@ where
                 scheduled_render_handle: RefCell::new(None),
                 after_next_render_callbacks: RefCell::new(Vec::new()),
                 render_info: Cell::new(None),
+                devtools: RefCell::new(None),
             }),
-            devtools: Rc::new(None),
         };
 
         app.data.root_el.replace(Some(app.bootstrap_vdom()));
@@ -248,10 +202,6 @@ where
         );
 
         app.data.model.replace(Some(new_model));
-
-        options.iter().for_each(|opt|{
-            opt.apply(&mut app);
-        });
 
         routing::setup_popstate_listener(
             enc!((app => s) move |closure| {
@@ -276,15 +226,6 @@ where
         app.rerender_vdom();
         app
     }
-
-    pub fn start(
-        root_element: impl GetElement,
-        init: impl FnOnce(Url, &mut OrdersContainer<Ms, Mdl, INodes>) -> Mdl + 'static,
-        update: impl FnOnce(Ms, &mut Mdl, &mut OrdersContainer<Ms, Mdl, INodes>) + Clone + 'static,
-        view: impl FnOnce(&Mdl) -> INodes + Clone + 'static,
-    ) -> Self { 
-        Self::start_with_options(root_element, init, update, view, vec![])
-    } 
 
     /// Invoke your `update` function with provided message.
     pub fn update(&self, message: Ms) {
@@ -459,13 +400,15 @@ where
 
         if let Some(message) = message {
 
-            if self.devtools.is_some() {
+            if self.data.devtools.borrow().is_some() {
                 log!("Devtools are enabled")
+            } else {
+                log!("Devtools are disabled")
             }
 
-            &self.devtools.iter().for_each(|devtools|{
+            if let Some(devtools) = self.data.devtools.borrow().as_ref() {
                 devtools.received(&message, &self.data.model.borrow().as_ref().unwrap());
-            });
+            }
 
             for l in self.data.msg_listeners.borrow().iter() {
                 (l)(&message)
@@ -477,10 +420,9 @@ where
                 &mut orders,
             );
 
-            &self.devtools.iter().for_each(|devtools|{
+            if let Some(devtools) = self.data.devtools.borrow().as_ref() {
                 devtools.updated(&self.data.model.borrow().as_ref().unwrap());
-            });
-
+            }
         }
 
         match orders.should_render {
