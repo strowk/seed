@@ -1,7 +1,32 @@
-use seed::{prelude::*, *};
+use crate::{prelude::*, *};
 use std::marker::PhantomData;
-use js_sys::{Array, Error, JsString, Reflect};
+use js_sys::{Array, JsString, Reflect};
+use std::rc::Rc;
+use crate::app::DevTool;
 
+pub struct WithDevtools {}
+
+impl WithDevtools {
+    pub fn new() -> WithDevtools {
+        WithDevtools{
+        }
+    }
+} 
+
+impl<Ms, Mdl, INodes> crate::app::AppOptions<Ms, Mdl, INodes> for WithDevtools 
+where
+    Ms: serde::Serialize + 'static,
+    Mdl: serde::Serialize + 'static,
+    INodes: IntoNodes<Ms>,
+{
+    fn apply(&self, app: &mut App<Ms, Mdl, INodes>) {
+        let devtools = DevTools::new();
+        devtools.initialized(app.data.model.borrow().as_ref().unwrap());
+        app.devtools = Rc::new(Some(Box::new(devtools)));
+    }
+}
+
+#[derive(Clone)]
 pub struct DevTools<Ms, Mdl> {
     // DevTools has to be generic to allow creation for any Model and Msg,
     // but if it's generic, Rust requires to use all parameter types, hence
@@ -15,7 +40,7 @@ pub struct DevTools<Ms, Mdl> {
 
 #[derive(serde::Serialize)]
 struct InitialData<Ms> {
-    middleware_version: String,
+    seed_version: String,
     messages: Vec<Ms>,
 }
 
@@ -45,8 +70,9 @@ fn extract_name(key: &JsString) -> String {
     }
 }
 
-impl<Ms: serde::Serialize, Mdl: serde::Serialize> DevTools<Ms, Mdl> {
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+impl<Ms: serde::Serialize, Mdl: serde::Serialize> DevTools<Ms, Mdl> {
     fn get_root(&self) -> Result<JsValue, String> {
         let w = window();
         match Reflect::get(&w, &self.root_key) {
@@ -60,7 +86,7 @@ impl<Ms: serde::Serialize, Mdl: serde::Serialize> DevTools<Ms, Mdl> {
     fn init(&self) -> Result<(),()> {
         let w = window();
         let data: InitialData<Ms> = InitialData{
-            middleware_version: "0.0.1".to_string(),
+            seed_version: VERSION.to_string(), // TODO: somehow get it from the build
             messages: vec![],
         };
         let starting_val = serde_wasm_bindgen::to_value(&data);
@@ -148,7 +174,8 @@ impl<Ms: serde::Serialize, Mdl: serde::Serialize> DevTools<Ms, Mdl> {
     }
 }
 
-impl<Ms: serde::Serialize, Mdl: serde::Serialize> seed::Middleware for DevTools<Ms, Mdl> {
+
+impl<Ms: serde::Serialize, Mdl: serde::Serialize> DevTool for DevTools<Ms, Mdl> {
     type Mdl = Mdl;
     type Ms =  Ms;
     
@@ -159,11 +186,11 @@ impl<Ms: serde::Serialize, Mdl: serde::Serialize> seed::Middleware for DevTools<
         self.save_model(model);
     }
 
-    fn received(&self, ms: &Self::Ms, model: &Self::Mdl) {
+    fn received(&self, ms: &Ms, model: &Mdl) {
         self.save_message(ms, model);
     }
 
-    fn updated(&self, model: &Self::Mdl) {
+    fn updated(&self, model: &Mdl) {
         self.save_model(model);
     }
 

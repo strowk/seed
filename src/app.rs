@@ -16,6 +16,7 @@ use std::{
 use sub_manager::SubManager;
 use wasm_bindgen::closure::Closure;
 
+
 pub mod cfg;
 pub mod cmd_manager;
 pub mod cmds;
@@ -41,6 +42,9 @@ pub use render_info::RenderInfo;
 pub use stream_manager::StreamHandle;
 pub use sub_manager::{Notification, SubHandle};
 
+pub mod devtools;
+pub use devtools::DevTools;
+
 /// Determines if an update should cause the `VDom` to rerender or not.
 pub enum ShouldRender {
     Render,
@@ -48,7 +52,7 @@ pub enum ShouldRender {
     Skip,
 }
 
-pub trait Middleware {
+pub trait DevTool {
     type Mdl;
     type Ms;
 
@@ -67,7 +71,16 @@ where
     cfg: Rc<AppCfg<Ms, Mdl, INodes>>,
     /// Mutable app state.
     data: Rc<AppData<Ms, Mdl>>,
-    middlewares: Rc<Vec<Box<dyn Middleware<Mdl = Mdl, Ms = Ms>>>>,
+    devtools: Rc<Option<Box<dyn DevTool<Mdl = Mdl, Ms = Ms>>>>,
+}
+
+pub trait AppOptions<Ms, Mdl, INodes> 
+where
+    Ms: 'static,
+    Mdl: 'static,
+    INodes: IntoNodes<Ms>,
+{
+    fn apply(&self, app: &mut App<Ms, Mdl, INodes>);
 }
 
 impl<Ms, Mdl, INodes> fmt::Debug for App<Ms, Mdl, INodes>
@@ -87,14 +100,12 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            middlewares: Rc::clone(&self.middlewares),
             cfg: Rc::clone(&self.cfg),
             data: Rc::clone(&self.data),
+            devtools: Rc::clone(&self.devtools),
         }
     }
 }
-
-
 
 /// We use a struct instead of series of functions, in order to avoid passing
 /// repetitive sequences of parameters.
@@ -146,12 +157,12 @@ where
     /// Panics if the root element cannot be found.
     ///
     // pub type UpdateFn<Ms, Mdl, INodes> = fn(Ms, &mut Mdl, &mut OrdersContainer<Ms, Mdl, INodes>);
-    pub fn start_with_middlewares(
+    pub fn start_with_options(
         root_element: impl GetElement,
         init: impl FnOnce(Url, &mut OrdersContainer<Ms, Mdl, INodes>) -> Mdl + 'static,
         update: impl FnOnce(Ms, &mut Mdl, &mut OrdersContainer<Ms, Mdl, INodes>) + Clone + 'static,
         view: impl FnOnce(&Mdl) -> INodes + Clone + 'static,
-        middlewares: Vec<Box<dyn Middleware<Ms = Ms, Mdl = Mdl>>>
+        options: Vec<Box<dyn AppOptions<Ms, Mdl, INodes>>>
     ) -> Self {
         // @TODO: Remove as soon as Webkit is fixed and older browsers are no longer in use.
         // https://github.com/seed-rs/seed/issues/241
@@ -178,7 +189,8 @@ where
                 .as_slice(),
         );
 
-        let app = Self {
+
+        let mut app = Self {
             cfg: Rc::new(AppCfg {
                 document: util::window().document().expect("get window's document"),
                 mount_point: root_element.get_element().expect("get root element"),
@@ -198,7 +210,7 @@ where
                 after_next_render_callbacks: RefCell::new(Vec::new()),
                 render_info: Cell::new(None),
             }),
-            middlewares: Rc::new(middlewares),
+            devtools: Rc::new(None),
         };
 
         app.data.root_el.replace(Some(app.bootstrap_vdom()));
@@ -209,9 +221,12 @@ where
             Url::current().skip_base_path(&Rc::clone(&app.cfg.base_path)),
             &mut orders,
         );
-        app.middlewares.iter().for_each(|mid| mid.initialized(&new_model));
 
         app.data.model.replace(Some(new_model));
+
+        options.iter().for_each(|opt|{
+            opt.apply(&mut app);
+        });
 
         routing::setup_popstate_listener(
             enc!((app => s) move |closure| {
@@ -243,7 +258,7 @@ where
         update: impl FnOnce(Ms, &mut Mdl, &mut OrdersContainer<Ms, Mdl, INodes>) + Clone + 'static,
         view: impl FnOnce(&Mdl) -> INodes + Clone + 'static,
     ) -> Self { 
-        Self::start_with_middlewares(root_element, init, update, view, vec![])
+        Self::start_with_options(root_element, init, update, view, vec![])
     } 
 
     /// Invoke your `update` function with provided message.
@@ -419,7 +434,9 @@ where
 
         if let Some(message) = message {
 
-            self.middlewares.iter().for_each(|mid| mid.received(&message, &self.data.model.borrow().as_ref().unwrap()));
+            &self.devtools.iter().for_each(|devtools|{
+                devtools.received(&message, &self.data.model.borrow().as_ref().unwrap());
+            });
 
             for l in self.data.msg_listeners.borrow().iter() {
                 (l)(&message)
@@ -431,7 +448,9 @@ where
                 &mut orders,
             );
 
-            self.middlewares.iter().for_each(|mid| mid.updated(&self.data.model.borrow().as_ref().unwrap()));
+            &self.devtools.iter().for_each(|devtools|{
+                devtools.updated(&self.data.model.borrow().as_ref().unwrap());
+            });
 
         }
 

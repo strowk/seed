@@ -91,7 +91,6 @@ macro_rules! map_callback_return_to_option_ms {
 // @TODO move to prelude (?)
 pub use crate::{
     app::App,
-    app::Middleware,
     browser::dom::cast::{
         to_drag_event, to_html_el, to_input, to_keyboard_event, to_mouse_event, to_select,
         to_textarea, to_touch_event,
@@ -174,8 +173,9 @@ pub fn set_timeout(handler: Box<dyn Fn()>, timeout: i32) {
 pub mod prelude {
     pub use crate::{
         app::{
-            Middleware, cmds, streams, subs, App, CmdHandle, GetElement, MessageMapper, Orders, RenderInfo,
+            cmds, streams, subs, App, CmdHandle, GetElement, MessageMapper, Orders, RenderInfo,
             StreamHandle, SubHandle,
+            devtools::WithDevtools, 
         },
         browser::dom::css_units::*,
         browser::dom::event_handler::{
