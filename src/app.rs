@@ -107,6 +107,31 @@ where
     }
 }
 
+// following is an alternative approach to enable devtools with enable_dev_tools method
+// Unfortunately it does not work for some unknown reason
+pub trait AppWithDevtools {
+    type Mdl: serde::Serialize;
+    type Ms: serde::Serialize;
+
+    fn enable_dev_tools(&mut self);
+}
+
+impl<Ms, Mdl, INodes> AppWithDevtools for App<Ms, Mdl, INodes>
+where
+    Ms: serde::Serialize + 'static,
+    Mdl: serde::Serialize + 'static,
+    INodes: IntoNodes<Ms>,
+{
+    type Mdl = Mdl;
+    type Ms = Ms;
+
+    fn enable_dev_tools(&mut self) {
+        let devtools: DevTools<Ms, Mdl> = DevTools::new();
+        devtools.initialized(&self.data.model.borrow().as_ref().unwrap());
+        self.devtools = Rc::new(Some(Box::new(devtools)));
+    }
+}
+
 /// We use a struct instead of series of functions, in order to avoid passing
 /// repetitive sequences of parameters.
 impl<Ms, Mdl, INodes> App<Ms, Mdl, INodes>
@@ -433,6 +458,10 @@ where
         let mut orders = OrdersContainer::new(self.clone());
 
         if let Some(message) = message {
+
+            if self.devtools.is_some() {
+                log!("Devtools are enabled")
+            }
 
             &self.devtools.iter().for_each(|devtools|{
                 devtools.received(&message, &self.data.model.borrow().as_ref().unwrap());

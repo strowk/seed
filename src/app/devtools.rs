@@ -8,8 +8,7 @@ pub struct WithDevtools {}
 
 impl WithDevtools {
     pub fn new() -> WithDevtools {
-        WithDevtools{
-        }
+        WithDevtools {}
     }
 } 
 
@@ -20,6 +19,7 @@ where
     INodes: IntoNodes<Ms>,
 {
     fn apply(&self, app: &mut App<Ms, Mdl, INodes>) {
+        log!("Initializing Seed DevTools");
         let devtools = DevTools::new();
         devtools.initialized(app.data.model.borrow().as_ref().unwrap());
         app.devtools = Rc::new(Some(Box::new(devtools)));

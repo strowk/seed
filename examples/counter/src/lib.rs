@@ -52,10 +52,15 @@ fn view(model: &Model) -> Node<Msg> {
 //     Start
 // ------ ------
 
+
 #[wasm_bindgen(start)]
 pub fn start() {
     // App::start("app", init, update, view);
 
-    App::start_with_options("app", init, update, view, vec![Box::new(WithDevtools::new())]);
+    // // Approach with options works
+    // App::start_with_options("app", init, update, view, vec![Box::new(WithDevtools::new())]);
+    
+    // // This one does not
+    App::start("app", init, update, view).enable_dev_tools();
 
 }

@@ -173,7 +173,7 @@ pub fn set_timeout(handler: Box<dyn Fn()>, timeout: i32) {
 pub mod prelude {
     pub use crate::{
         app::{
-            cmds, streams, subs, App, CmdHandle, GetElement, MessageMapper, Orders, RenderInfo,
+            AppWithDevtools, cmds, streams, subs, App, CmdHandle, GetElement, MessageMapper, Orders, RenderInfo,
             StreamHandle, SubHandle,
             devtools::WithDevtools, 
         },
