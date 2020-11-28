@@ -175,7 +175,6 @@ pub mod prelude {
         app::{
             AppWithDevtools, cmds, streams, subs, App, CmdHandle, GetElement, MessageMapper, Orders, RenderInfo,
             StreamHandle, SubHandle,
-            devtools::WithDevtools, 
         },
         browser::dom::css_units::*,
         browser::dom::event_handler::{

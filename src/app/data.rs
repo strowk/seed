@@ -1,6 +1,7 @@
 use super::{RenderInfo, SubManager};
 use crate::browser::util;
 use crate::virtual_dom::{El, EventHandlerManager};
+use crate::app::AppDevTool;
 use std::cell::{Cell, RefCell};
 use wasm_bindgen::closure::Closure;
 
@@ -18,4 +19,5 @@ pub(crate) struct AppData<Ms: 'static, Mdl> {
     pub scheduled_render_handle: RefCell<Option<util::RequestAnimationFrameHandle>>,
     pub after_next_render_callbacks: RefCell<Vec<Box<dyn FnOnce(RenderInfo) -> Option<Ms>>>>,
     pub render_info: Cell<Option<RenderInfo>>,
+    pub devtools: RefCell<Option<Box<dyn AppDevTool<Mdl = Mdl, Ms = Ms>>>>
 }

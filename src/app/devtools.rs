@@ -1,29 +1,39 @@
 use crate::{prelude::*, *};
 use std::marker::PhantomData;
 use js_sys::{Array, JsString, Reflect};
-use std::rc::Rc;
-use crate::app::DevTool;
 
-pub struct WithDevtools {}
+// following is an alternative approach to enable devtools with enable_dev_tools method
+// Unfortunately it does not work for some unknown reason
+pub trait AppWithDevtools {
+    type Mdl: serde::Serialize;
+    type Ms: serde::Serialize;
 
-impl WithDevtools {
-    pub fn new() -> WithDevtools {
-        WithDevtools {}
-    }
-} 
+    fn enable_dev_tools(&mut self);
+}
 
-impl<Ms, Mdl, INodes> crate::app::AppOptions<Ms, Mdl, INodes> for WithDevtools 
+impl<Ms, Mdl, INodes> AppWithDevtools for App<Ms, Mdl, INodes>
 where
     Ms: serde::Serialize + 'static,
     Mdl: serde::Serialize + 'static,
     INodes: IntoNodes<Ms>,
 {
-    fn apply(&self, app: &mut App<Ms, Mdl, INodes>) {
-        log!("Initializing Seed DevTools");
-        let devtools = DevTools::new();
-        devtools.initialized(app.data.model.borrow().as_ref().unwrap());
-        app.devtools = Rc::new(Some(Box::new(devtools)));
+    type Mdl = Mdl;
+    type Ms = Ms;
+
+    fn enable_dev_tools(&mut self) {
+        let devtools: DevTools<Ms, Mdl> = DevTools::new();
+        devtools.initialized(&self.data.model.borrow().as_ref().unwrap());
+        self.data.devtools.replace(Some(Box::new(devtools)));
     }
+}
+
+pub trait AppDevTool {
+    type Mdl;
+    type Ms;
+
+    fn initialized(&self, model: &Self::Mdl);
+    fn received(&self, ms: &Self::Ms, model: &Self::Mdl);
+    fn updated(&self, model: &Self::Mdl);
 }
 
 #[derive(Clone)]
@@ -175,7 +185,7 @@ impl<Ms: serde::Serialize, Mdl: serde::Serialize> DevTools<Ms, Mdl> {
 }
 
 
-impl<Ms: serde::Serialize, Mdl: serde::Serialize> DevTool for DevTools<Ms, Mdl> {
+impl<Ms: serde::Serialize, Mdl: serde::Serialize> AppDevTool for DevTools<Ms, Mdl> {
     type Mdl = Mdl;
     type Ms =  Ms;
     
