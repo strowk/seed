@@ -16,6 +16,7 @@ use std::{
 use sub_manager::SubManager;
 use wasm_bindgen::closure::Closure;
 
+
 pub mod cfg;
 pub mod cmd_manager;
 pub mod cmds;
@@ -40,6 +41,9 @@ pub use orders::{Orders, OrdersContainer, OrdersProxy};
 pub use render_info::RenderInfo;
 pub use stream_manager::StreamHandle;
 pub use sub_manager::{Notification, SubHandle};
+
+pub mod devtools;
+pub use devtools::{DevTools, AppDevTool, AppWithDevtools};
 
 /// Determines if an update should cause the `VDom` to rerender or not.
 pub enum ShouldRender {
@@ -164,6 +168,7 @@ where
                 .as_slice(),
         );
 
+
         let app = Self {
             cfg: Rc::new(AppCfg {
                 document: util::window().document().expect("get window's document"),
@@ -183,6 +188,7 @@ where
                 scheduled_render_handle: RefCell::new(None),
                 after_next_render_callbacks: RefCell::new(Vec::new()),
                 render_info: Cell::new(None),
+                devtools: RefCell::new(None),
             }),
         };
 
@@ -194,6 +200,7 @@ where
             Url::current().skip_base_path(&Rc::clone(&app.cfg.base_path)),
             &mut orders,
         );
+
         app.data.model.replace(Some(new_model));
 
         routing::setup_popstate_listener(
@@ -392,6 +399,17 @@ where
         let mut orders = OrdersContainer::new(self.clone());
 
         if let Some(message) = message {
+
+            if self.data.devtools.borrow().is_some() {
+                log!("Devtools are enabled")
+            } else {
+                log!("Devtools are disabled")
+            }
+
+            if let Some(devtools) = self.data.devtools.borrow().as_ref() {
+                devtools.received(&message, &self.data.model.borrow().as_ref().unwrap());
+            }
+
             for l in self.data.msg_listeners.borrow().iter() {
                 (l)(&message)
             }
@@ -401,6 +419,10 @@ where
                 &mut self.data.model.borrow_mut().as_mut().unwrap(),
                 &mut orders,
             );
+
+            if let Some(devtools) = self.data.devtools.borrow().as_ref() {
+                devtools.updated(&self.data.model.borrow().as_ref().unwrap());
+            }
         }
 
         match orders.should_render {

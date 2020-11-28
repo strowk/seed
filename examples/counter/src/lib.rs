@@ -17,13 +17,13 @@ fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
 // ------ ------
 //     Model
 // ------ ------
-
 type Model = i32;
 
 // ------ ------
 //    Update
 // ------ ------
 
+#[derive(serde::Serialize)]
 enum Msg {
     Increment,
     Decrement,
@@ -52,7 +52,9 @@ fn view(model: &Model) -> Node<Msg> {
 //     Start
 // ------ ------
 
+
 #[wasm_bindgen(start)]
 pub fn start() {
-    App::start("app", init, update, view);
+    // App::start("app", init, update, view);
+    App::start("app", init, update, view).enable_dev_tools();
 }
